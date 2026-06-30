@@ -1,16 +1,18 @@
 'use client'
 import { useRef, useState, useCallback, useMemo, useEffect } from 'react'
 import dynamic from 'next/dynamic'
-const ForceGraph2D = dynamic(() => import('react-force-graph-2d'), { ssr: false })
+const ForceGraph3D = dynamic(() => import('react-force-graph-3d'), { ssr: false })
 import type React from 'react'
 import type { CausalGraph, GraphNode, GraphEdge } from '@/lib/types'
 
 const VALENCE_COLOR: Record<string, string> = {
-  positive: '#ff9eb5', complex: '#a78bfa', heavy: '#9d7cf0', neutral: '#6b7494',
+  positive: '#ff9eb5', complex: '#a78bfa', heavy: '#9d7cf0', neutral: '#8b95b3',
 }
-const SPINE_COLOR = '#6b7494'
+const SPINE_COLOR = '#aab4d4'
+const GRAY = '#7c87a8'
+const DIM = '#2a3147'
 
-interface FGNode extends GraphNode { id: string; x?: number; y?: number }
+interface FGNode extends GraphNode { id: string }
 interface FGLink extends Omit<GraphEdge, 'source'> { source: string | FGNode; target: string | FGNode }
 
 export default function StarGraph({ graph, onEdgeWeightChange, onEdgeDelete, onEdgeConfirm, whatIfDeltas }: {
@@ -33,81 +35,92 @@ export default function StarGraph({ graph, onEdgeWeightChange, onEdgeDelete, onE
     links: graph.edges.map((e) => ({ ...e, source: e.source_node_id, target: e.target_node_id })) as FGLink[],
   }), [graph])
 
-  const adjacency = useMemo(() => {
-    const map: Record<string, Set<string>> = {}
+  const { neighbors, nodeLinks } = useMemo(() => {
+    const nb: Record<string, Set<string>> = {}
+    const nl: Record<string, Set<string>> = {}
     graph.edges.forEach((e) => {
-      ;(map[e.source_node_id] ||= new Set()).add(e.target_node_id)
-      ;(map[e.target_node_id] ||= new Set()).add(e.source_node_id)
+      ;(nb[e.source_node_id] ||= new Set()).add(e.target_node_id)
+      ;(nb[e.target_node_id] ||= new Set()).add(e.source_node_id)
+      ;(nl[e.source_node_id] ||= new Set()).add(e.edge_id)
+      ;(nl[e.target_node_id] ||= new Set()).add(e.edge_id)
     })
-    return map
+    return { neighbors: nb, nodeLinks: nl }
   }, [graph])
 
-  const isHighlighted = useCallback((id: string) => {
-    if (!hoverNode) return true
-    if (id === hoverNode) return true
-    return adjacency[hoverNode]?.has(id) ?? false
-  }, [hoverNode, adjacency])
+  const degree = useMemo(() => {
+    const d: Record<string, number> = {}
+    graph.edges.forEach((e) => { d[e.source_node_id] = (d[e.source_node_id]||0)+1; d[e.target_node_id] = (d[e.target_node_id]||0)+1 })
+    return d
+  }, [graph])
 
-  const drawNode = useCallback((node: FGNode, ctx: CanvasRenderingContext2D, gs: number) => {
-    const x = node.x ?? 0, y = node.y ?? 0
-    const isSpine = node.type === 'spine'
-    const color = isSpine ? SPINE_COLOR : (VALENCE_COLOR[node.valence] || SPINE_COLOR)
-    const dim = hoverNode !== null && !isHighlighted(node.id)
-    const r = isSpine ? 6 : 5
-    ctx.globalAlpha = dim ? 0.15 : 1
-    if (!isSpine && !dim) {
-      const g = ctx.createRadialGradient(x, y, r, x, y, r * 3)
-      g.addColorStop(0, color + '55'); g.addColorStop(1, color + '00')
-      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r * 3, 0, 2 * Math.PI); ctx.fill()
-    }
-    if (whatIfDeltas?.[node.id] !== undefined) {
-      const d = whatIfDeltas[node.id]
-      if (Math.abs(d) > 0.01) {
-        ctx.strokeStyle = d > 0 ? '#7cffb5' : '#ff7c7c'
-        ctx.lineWidth = 2 / gs; ctx.beginPath(); ctx.arc(x, y, r + 4, 0, 2 * Math.PI); ctx.stroke()
-      }
-    }
-    ctx.beginPath(); ctx.arc(x, y, r, 0, 2 * Math.PI); ctx.fillStyle = color; ctx.fill()
-    ctx.lineWidth = 1.5 / gs
-    if (node.source === 'ai_inferred') { ctx.setLineDash([2/gs, 2/gs]); ctx.strokeStyle = color + 'aa' }
-    else { ctx.setLineDash([]); ctx.strokeStyle = '#ffffffcc' }
-    ctx.stroke(); ctx.setLineDash([])
-    const fs = Math.max(11 / gs, 2.5)
-    ctx.font = `${fs}px -apple-system,sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'top'
-    ctx.fillStyle = dim ? '#8b95b355' : '#e8ecf6'; ctx.fillText(node.title, x, y + r + 2)
-    ctx.globalAlpha = 1
-  }, [hoverNode, isHighlighted, whatIfDeltas])
+  const isHiNode = useCallback((id: string) => !hoverNode || id === hoverNode || (neighbors[hoverNode]?.has(id) ?? false), [hoverNode, neighbors])
+  const isHiLink = useCallback((edgeId: string) => !hoverNode || (nodeLinks[hoverNode]?.has(edgeId) ?? false), [hoverNode, nodeLinks])
 
-  const linkColor = useCallback((link: FGLink) => {
-    const s = typeof link.source === 'string' ? link.source : (link.source as FGNode).id
-    const t = typeof link.target === 'string' ? link.target : (link.target as FGNode).id
-    if (hoverNode !== null && !(isHighlighted(s) && isHighlighted(t))) return 'rgba(120,140,200,0.05)'
-    if (link.edge_type === 'spine_sequence') return 'rgba(107,116,148,0.6)'
-    if (link.source === 'ai_suggested') return 'rgba(124,156,255,0.25)'
-    return 'rgba(167,139,250,0.45)'
-  }, [hoverNode, isHighlighted])
+  const nodeColor = useCallback((n: FGNode) => {
+    if (whatIfDeltas?.[n.id] !== undefined && Math.abs(whatIfDeltas[n.id]) > 0.01)
+      return whatIfDeltas[n.id] > 0 ? '#7cffb5' : '#ff7c7c'
+    if (!hoverNode) return GRAY
+    if (!isHiNode(n.id)) return DIM
+    return n.type === 'spine' ? SPINE_COLOR : (VALENCE_COLOR[n.valence] || GRAY)
+  }, [hoverNode, isHiNode, whatIfDeltas])
 
-  const linkWidth = useCallback((l: FGLink) => l.edge_type === 'spine_sequence' ? 2 : Math.max(0.5, l.weight * 3), [])
-  const linkLineDash = useCallback((l: FGLink) => l.source === 'ai_suggested' ? [3, 3] : null, [])
+  const linkColor = useCallback((l: FGLink) => {
+    if (!hoverNode) return 'rgba(200,210,235,0.55)'
+    if (!isHiLink(l.edge_id)) return 'rgba(120,140,200,0.08)'
+    if (l.edge_type === 'spine_sequence') return 'rgba(220,228,248,1)'
+    return 'rgba(190,170,255,1)'
+  }, [hoverNode, isHiLink])
+
+  const linkWidth = useCallback((l: FGLink) => {
+    if (hoverNode && isHiLink(l.edge_id)) return l.edge_type === 'spine_sequence' ? 1.6 : 1.2
+    return l.edge_type === 'spine_sequence' ? 1.0 : 0.7
+  }, [hoverNode, isHiLink])
+
+  // 每个节点：球体上方挂一个常驻文字标签
+  const nodeThreeObject = useCallback((n: FGNode) => {
+    let SpriteText: any
+    try { SpriteText = require('three-spritetext').default } catch { return undefined }
+    const sprite = new SpriteText(n.title)
+    sprite.color = hoverNode ? (isHiNode(n.id) ? '#e8ecf6' : '#3a4158') : '#c4ccdf'
+    sprite.textHeight = 4
+    sprite.fontFace = 'sans-serif'
+    sprite.position.y = -(2 + (degree[n.id] || 0) * 1.5) - 5
+    return sprite
+  }, [hoverNode, isHiNode, degree])
+
+  const onNodeDrag = useCallback(() => { fgRef.current?.d3ReheatSimulation?.() }, [])
 
   useEffect(() => {
-    if (selected?.kind === 'edge')
-      setSelected((s) => s?.kind === 'edge' ? { ...s, tempWeight: s.data.weight } : s)
-  }, [graph])
+    const t = setTimeout(() => fgRef.current?.cameraPosition?.({ z: 320 }, undefined, 1500), 300)
+    return () => clearTimeout(t)
+  }, [])
 
-  const P = { position: 'absolute' as const, top: 72, right: 20, width: 320, maxHeight: 'calc(100vh - 160px)', overflowY: 'auto' as const, zIndex: 10, background: 'rgba(18,24,42,0.82)', border: '1px solid rgba(120,140,200,0.18)', borderRadius: 16, padding: 20, backdropFilter: 'blur(16px)' }
+  const P = { position: 'absolute' as const, top: 72, right: 20, width: 320, maxHeight: 'calc(100vh - 160px)', overflowY: 'auto' as const, zIndex: 10, background: 'rgba(10,14,26,0.78)', border: '1px solid rgba(120,140,200,0.18)', borderRadius: 16, padding: 20, backdropFilter: 'blur(16px)' }
 
   return (
     <>
       <div style={{ width: '100vw', height: '100vh' }}>
-        <ForceGraph2D ref={fgRef} graphData={fgData} backgroundColor="#0a0e1a"
-          nodeCanvasObject={drawNode as any}
-          nodePointerAreaPaint={(n: any, c: string, ctx: CanvasRenderingContext2D) => { ctx.fillStyle = c; ctx.beginPath(); ctx.arc(n.x, n.y, 8, 0, 2 * Math.PI); ctx.fill() }}
-          linkColor={linkColor as any} linkWidth={linkWidth as any} linkLineDash={linkLineDash as any}
-          onNodeHover={(n: FGNode | null) => setHoverNode(n ? n.id : null)}
-          onNodeClick={(n: FGNode) => setSelected({ kind: 'node', data: n })}
+        <ForceGraph3D ref={fgRef} graphData={fgData}
+          backgroundColor="#03050c"
+          showNavInfo={false}
+          nodeColor={nodeColor as any}
+          nodeOpacity={0.95}
+          nodeResolution={16}
+          nodeVal={(n: any) => 2 + (degree[n.id] || 0) * 1.5}
+          nodeThreeObject={nodeThreeObject as any}
+          nodeThreeObjectExtend={true}
+          linkColor={linkColor as any}
+          linkWidth={linkWidth as any}
+          linkOpacity={0.9}
+          linkDirectionalParticles={(l: any) => hoverNode && isHiLink(l.edge_id) ? 3 : 0}
+          linkDirectionalParticleWidth={1.6}
+          linkDirectionalParticleSpeed={0.006}
+          onNodeHover={(n: any) => setHoverNode(n ? n.id : null)}
+          onNodeClick={(n: any) => setSelected({ kind: 'node', data: n })}
           onLinkClick={(l: any) => setSelected({ kind: 'edge', data: l, tempWeight: l.weight })}
-          cooldownTicks={100} onEngineStop={() => fgRef.current?.zoomToFit(400, 80)} />
+          onNodeDrag={onNodeDrag}
+          enableNodeDrag={true}
+          warmupTicks={60} cooldownTicks={200} />
       </div>
       {selected && (
         <div style={P}>
