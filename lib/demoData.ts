@@ -1,0 +1,32 @@
+import type { CausalGraph } from './types'
+export const demoGraph: CausalGraph = {
+  nodes: [
+    { node_id: 's_birth', type: 'spine', category: 'identity', date: '1998', entity: null, title: '出生', valence: 'neutral', confidence: 1, source: 'user_stated', raw_quote: null, parent_spine_id: null },
+    { node_id: 's_primary', type: 'spine', category: 'education', date: '2005', entity: null, title: '小学', valence: 'neutral', confidence: 1, source: 'user_stated', raw_quote: null, parent_spine_id: null },
+    { node_id: 's_middle', type: 'spine', category: 'education', date: '2011', entity: null, title: '中学', valence: 'neutral', confidence: 1, source: 'user_stated', raw_quote: null, parent_spine_id: null },
+    { node_id: 's_uni', type: 'spine', category: 'education', date: '2017', entity: null, title: '大学', valence: 'neutral', confidence: 1, source: 'user_stated', raw_quote: null, parent_spine_id: null },
+    { node_id: 's_now', type: 'spine', category: 'identity', date: '2024', entity: null, title: '现在', valence: 'neutral', confidence: 1, source: 'user_stated', raw_quote: null, parent_spine_id: null },
+    { node_id: 'b_family', type: 'branch', category: 'relationship', date: '2003', entity: null, title: '原生家庭', valence: 'positive', confidence: 0.8, source: 'user_stated', raw_quote: '小时候父母很支持我做喜欢的事', parent_spine_id: 's_birth' },
+    { node_id: 'b_conf', type: 'branch', category: 'identity', date: '2010', entity: null, title: '自信心', valence: 'complex', confidence: 0.5, source: 'ai_inferred', raw_quote: null, parent_spine_id: 's_primary' },
+    { node_id: 'b_love', type: 'branch', category: 'relationship', date: '2015', entity: null, title: '初恋分手', valence: 'heavy', confidence: 0.7, source: 'user_stated', raw_quote: '高中谈了一场恋爱，后来分手了', parent_spine_id: 's_middle' },
+    { node_id: 'b_gaokao', type: 'branch', category: 'education', date: '2017', entity: null, title: '高考失利', valence: 'heavy', confidence: 0.8, source: 'user_stated', raw_quote: '高考没考好', parent_spine_id: 's_middle' },
+    { node_id: 'b_major', type: 'branch', category: 'education', date: '2017', entity: { name: '某大学', entity_id: null }, title: '选了冷门专业', valence: 'complex', confidence: 0.6, source: 'user_stated', raw_quote: null, parent_spine_id: 's_uni' },
+    { node_id: 'b_career', type: 'branch', category: 'career', date: '2021', entity: null, title: '转行做设计', valence: 'positive', confidence: 0.7, source: 'user_stated', raw_quote: '毕业后转行做了设计', parent_spine_id: 's_uni' },
+    { node_id: 'b_traj', type: 'branch', category: 'identity', date: '2024', entity: null, title: '人生轨迹', valence: 'complex', confidence: 0.5, source: 'ai_inferred', raw_quote: null, parent_spine_id: 's_now' },
+  ],
+  edges: [
+    { edge_id: 'e1', source_node_id: 's_birth', target_node_id: 's_primary', edge_type: 'spine_sequence', weight: 1, direction: 'forward', confidence: 1, source: 'user_confirmed', rationale: null },
+    { edge_id: 'e2', source_node_id: 's_primary', target_node_id: 's_middle', edge_type: 'spine_sequence', weight: 1, direction: 'forward', confidence: 1, source: 'user_confirmed', rationale: null },
+    { edge_id: 'e3', source_node_id: 's_middle', target_node_id: 's_uni', edge_type: 'spine_sequence', weight: 1, direction: 'forward', confidence: 1, source: 'user_confirmed', rationale: null },
+    { edge_id: 'e4', source_node_id: 's_uni', target_node_id: 's_now', edge_type: 'spine_sequence', weight: 1, direction: 'forward', confidence: 1, source: 'user_confirmed', rationale: null },
+    { edge_id: 'e5', source_node_id: 'b_family', target_node_id: 's_birth', edge_type: 'attribution', weight: 0.8, direction: 'forward', confidence: 0.8, source: 'user_confirmed', rationale: null },
+    { edge_id: 'e6', source_node_id: 'b_gaokao', target_node_id: 's_middle', edge_type: 'attribution', weight: 0.9, direction: 'forward', confidence: 0.8, source: 'user_confirmed', rationale: null },
+    { edge_id: 'e7', source_node_id: 'b_family', target_node_id: 'b_conf', edge_type: 'causal', weight: 0.6, direction: 'forward', confidence: 0.55, source: 'ai_suggested', rationale: '原生家庭的支持，往往是自信心的来源之一' },
+    { edge_id: 'e8', source_node_id: 'b_love', target_node_id: 'b_gaokao', edge_type: 'causal', weight: 0.5, direction: 'forward', confidence: 0.4, source: 'ai_suggested', rationale: '情感波动可能影响了备考状态（仅为一种可能的解读）' },
+    { edge_id: 'e9', source_node_id: 'b_gaokao', target_node_id: 'b_major', edge_type: 'causal', weight: 0.7, direction: 'forward', confidence: 0.6, source: 'ai_suggested', rationale: '高考分数通常会限制专业选择范围' },
+    { edge_id: 'e10', source_node_id: 'b_conf', target_node_id: 'b_career', edge_type: 'causal', weight: 0.5, direction: 'forward', confidence: 0.45, source: 'ai_suggested', rationale: '自信心可能影响了转行的决心' },
+    { edge_id: 'e11', source_node_id: 'b_major', target_node_id: 'b_career', edge_type: 'causal', weight: 0.4, direction: 'forward', confidence: 0.4, source: 'ai_suggested', rationale: '对原专业的不满，可能促成了转行' },
+    { edge_id: 'e12', source_node_id: 'b_career', target_node_id: 'b_traj', edge_type: 'causal', weight: 0.7, direction: 'forward', confidence: 0.5, source: 'ai_suggested', rationale: '职业选择对当前的人生状态有重要影响' },
+    { edge_id: 'e13', source_node_id: 'b_conf', target_node_id: 'b_traj', edge_type: 'causal', weight: 0.5, direction: 'forward', confidence: 0.45, source: 'ai_suggested', rationale: '自我认知贯穿影响人生轨迹' },
+  ],
+}
